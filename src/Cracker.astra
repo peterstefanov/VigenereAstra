@@ -1,0 +1,76 @@
+agent Cracker {
+
+	module Console console;
+	module System system;
+	
+	types my_types{
+		formula state(string);
+		formula manager(string);
+        formula passwordLengthFinder(string);
+        formula passwordFinder(string);
+        formula done(int, string);
+        formula done(int);
+        formula done(string, string);
+        formula taskPassword(string, int);
+        formula taskPasswordLength(string);
+        formula taskCrack(string);
+        formula problem(string);
+	}
+	
+	initial manager("main");     
+	initial passwordLengthFinder("passwordLengthFinder");   
+	initial passwordFinder("passwordFinder");  
+	
+	rule @message(request, string Manager, taskCrack(string C)) : manager(Manager){
+	
+	     if(C == "") {
+            send(refuse, Manager, state(system.name() + " refused to crack"));
+         } else {
+            send(agree, Manager, state(system.name() + " agreed to crack"));
+            
+            try {
+                system.createAgent("passwordLengthFinder", "PasswordLengthFinder");
+                !doPasswordLength(C);             
+            } recover {
+                send(failure, Manager, state(system.name() + " fails to crack"));
+            }
+        }      
+    }
+    
+    rule +!doPasswordLength(string C) : passwordLengthFinder(string PLF){    
+         //ask passwordLengthFinder to find the length of the password
+		 send(request, PLF, taskPasswordLength(C));
+    }
+    
+    rule +!doPassword(string C, int L) : passwordFinder(string PF){		
+		//ask passwordFinder to find the password
+		send(request, PF, taskPassword(C, L));
+    }
+    
+    rule @message(agree, string From, state(string S)) : passwordLengthFinder(From) | passwordFinder(From){
+		send(inform, system.getOwner(), state(S));
+	}
+	
+	rule @message(refuse, string From, state(string S)) : passwordLengthFinder(From) | passwordFinder(From){
+	    system.terminateAgent(From);
+	    send(inform, system.getOwner(), problem(S));
+        console.println(From + " : " + S);
+	}
+	
+	rule @message(failure, string From, state(string S)) : passwordLengthFinder(From) | passwordFinder(From){
+	    system.terminateAgent(From);
+	    send(inform, system.getOwner(), problem(S));
+	}
+	
+	rule @message(inform, string PLF, done(int L, string C)) : passwordLengthFinder(PLF){
+		system.terminateAgent(PLF);
+		send(inform, system.getOwner(), done(L));
+		system.createAgent("passwordFinder", "PasswordFinder");
+		!doPassword(C, L);	
+	}
+	
+	rule @message(inform, string PF, done(string P, string C)) : passwordFinder(PF){
+		system.terminateAgent(PF);
+		send(inform, system.getOwner(), done(P, C));
+	}
+}

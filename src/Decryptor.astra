@@ -1,0 +1,62 @@
+
+
+agent Decryptor {
+
+	module Console console;
+	module System system;
+	module aop.utils.Support support;
+	module Strings strs;
+	
+	types my_types{
+		formula state(string);
+		formula manager(string);
+        formula taskDecrypt(string, string);
+        formula done(string);
+	}
+	
+    initial manager("main");
+	
+	rule @message(request, string Manager, taskDecrypt(string P, string C)) : manager(Manager){
+         if(P == "" | C == "") {
+            send(refuse, Manager, state(system.name() + " refused to decrypt"));
+         } else {
+            send(agree, Manager, state(system.name() + " agreed to decrypt"));
+            
+            try {
+                 !doDecrypt(P, C, Manager);           
+            } recover {
+                send(failure, Manager, state(system.name() + " fails to decrypt"));
+            }
+        }       
+    }
+    
+    rule +!doDecrypt(string P, string C, string Manager) {
+		string longKey = P;
+		string sb = "";
+		int i = 0;
+		while (i < support.length(C)) {
+		
+			int c = support.charAt(C,i);
+			if (i > support.length(P) - 1) {
+				string temp = support.substring(sb,i - support.length(P), i - support.length(P) + 1);
+				longKey = longKey + temp;
+			}
+
+			if (c >= 32) {
+				int keyCharValue = support.charAt(longKey, i % support.length(longKey)) - 65;
+				c = c - keyCharValue;
+				if (c < 32) {
+					c = c + 127 - 32;
+				}
+			}
+			sb = sb + support.toChar(c);
+			i = i + 1;
+		}
+
+		!doInform(sb, Manager);               
+    }
+    
+    rule +!doInform(string C, string Manager) {
+        send(inform, Manager, done(C));
+    }
+}

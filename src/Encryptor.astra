@@ -1,0 +1,53 @@
+agent Encryptor {
+	
+	module Console console;
+	module System system;
+	module aop.utils.Support support;
+	module Strings strs;
+	
+	types my_types{
+	   formula state(string);
+	   formula manager(string);
+       formula taskEncrypt(string, string);
+       formula done(string);
+	}
+
+    initial manager("main");
+	
+    rule @message(request, string Manager, taskEncrypt(string P, string T)) : manager(Manager){
+         if(P == "" | T == "") {
+            send(refuse, Manager, state(system.name() + " refused to encrypt"));
+         } else {
+            send(agree, Manager, state(system.name() + " agreed to encrypt"));
+            
+            try {
+                !doEncrypt(P, T);            
+            } recover {
+                send(failure, Manager, state(system.name() + " fails to encrypt"));
+            }
+        }        
+    }
+      
+	rule +!doEncrypt(string P, string T) {
+	    string longKey = P + support.substring(T, 0, support.length(T) - support.length(P));
+        string sb = "";
+        int i = 0;
+		while ( i < support.length(T)) {
+			int c = support.charAt(T,i);
+			if (c >= 32) {
+				int keyCharValue = support.charAt(longKey, i % support.length(longKey)) - 65;
+				c = c + keyCharValue;
+				if (c > 127) {
+					c = c + 32 - 127;
+				}
+			}
+			sb = sb + support.toChar(c);
+			i = i + 1;
+		}		 
+		!doInform(sb);						
+    }
+    
+    rule +!doInform(string C) {
+        send(inform, system.getOwner(), done(C));
+    }
+}

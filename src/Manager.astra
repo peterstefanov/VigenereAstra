@@ -1,0 +1,107 @@
+agent Manager {
+	
+	module aop.GUIModule gui;
+	module System system;
+	module Console console;
+	
+	types my_types{
+		formula state(string);
+		formula cracker(string);
+		formula encryptor(string);
+		formula decryptor(string);
+		formula taskEncrypt(string, string);
+		formula taskDecrypt(string, string);
+		formula taskCrack(string);
+		formula done(string);
+		formula done(int);
+		formula done(string, string);
+		formula problem(string);
+	}
+	
+	initial !init();
+	initial cracker("cracker");
+	initial decryptor("decryptor");
+	initial encryptor("encryptor");
+	
+	rule +!init() {
+		gui.launch("gui.JFrameVigenere");
+	}
+	
+	rule +!encrypt(object<aop.PlainObject> plainObject) {
+		//create Encryptor agent
+		system.createAgent("encryptor", "Encryptor");
+		//ask encryptor to encrypt the plain text with provided password
+		send(request, "encryptor", taskEncrypt(gui.getPassword(plainObject), gui.getPlainText(plainObject)));
+	}
+	
+	rule +!decrypt(object<aop.CipherObject> cipherObject) {
+		//create Decryptor agent
+		system.createAgent("decryptor", "Decryptor");
+		//ask Decryptor to decrypt the ciphertext with provided password
+		send(request, "decryptor", taskDecrypt(gui.getPassword(cipherObject), gui.getCipherText(cipherObject)));
+	}
+	
+	rule +!crack(object<aop.CipherObject> cipherObject) {
+		//create Cracker agent
+		system.createAgent("cracker", "Cracker");
+		//ask Cracker to crack the ciphertext
+		send(request, "cracker", taskCrack(gui.getCipherText(cipherObject)));
+	}
+	
+	rule @message(agree, string From, state(string S)) {
+		console.println(From + " : " + S);
+		!print(From, S);
+	}
+	
+	rule @message(refuse, string From, state(string S)) {
+		//terminate the agent if he is not agree
+		system.terminateAgent(From);
+		console.println(From + " : " + S);
+		!print(From, S);
+	}
+	
+	rule @message(failure, string From, state(string S)) {
+		console.println(From + " : " + S);
+		system.terminateAgent(From);
+		!print(From, S);
+	}
+	
+	rule @message(inform, string From, done(string D)) : encryptor(From) | decryptor(From){
+		system.terminateAgent(From);
+		!print(From, D);
+	}
+	
+	rule @message(inform, string Cracker, done(string P, string C)) : cracker(Cracker) {
+		system.terminateAgent(Cracker);
+		!print(Cracker, P);
+		
+		//create Decryptor agent
+		system.createAgent("decryptor", "Decryptor");
+		//ask Decryptor to decrypt the ciphertext with provided password
+		send(request, "decryptor", taskDecrypt(P, C));
+	}
+	
+	rule @message(inform, string Cracker, done(int L)) : cracker(Cracker){
+		console.println(Cracker + " password length is: " + L);
+		!print(Cracker, L);
+	}
+	
+	rule @message(inform, string Cracker, problem(string S)) : cracker(Cracker){
+	    system.terminateAgent(Cracker);
+		!print(Cracker, S);
+	}
+	
+	rule @message(inform, string Cracker, state(string S)) : cracker(Cracker){
+		console.println(Cracker + " cracker inform state " + S);
+		!print(Cracker, S);
+	}
+	
+	rule +!print(string Where, string Text) {
+		gui.sendString(Where, Text);
+	}
+	
+	rule +!print(string Where, int Number) {
+		gui.sendInt(Where, Number);
+	}	
+}
+
